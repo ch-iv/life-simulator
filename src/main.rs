@@ -1,6 +1,4 @@
 use macroquad::prelude::*;
-use macroquad::input::*;
-use macroquad::window;
 
 
 struct PlayerParticle {
@@ -9,11 +7,21 @@ struct PlayerParticle {
     size: f32,
     deflate_speed: f32,
 }
+
 struct Player {
     x: f32,
     y: f32,
     speed: f32,
+    size: f32,
     particles: Vec<PlayerParticle>,
+    collision_box: Rect,
+}
+
+impl Player{
+    fn new(x: f32, y: f32, speed: f32, size: f32) -> Self{
+        let egg_collision_box = Rect::new(x, y, size, size);
+        Self {x, y, speed, size, particles: vec![], collision_box: egg_collision_box }
+    }
 }
 
 struct Egg{
@@ -21,11 +29,44 @@ struct Egg{
     y: f32,
     size: f32,
     color: Color,
+    collision_box: Rect,
 }
 
 impl Egg {
+    fn new(x: f32, y: f32, size: f32, color: Color) -> Self{
+        let egg_collision_box = Rect::new(x, y, size, size);
+        Self {x, y, size, color, collision_box: egg_collision_box }
+    }
+
+    fn regenerate(&mut self){
+        self.x = rand::gen_range(0.0+self.size/2.0, screen_width()-self.size/2.0);
+        self.y = rand::gen_range(0.0+self.size/2.0, screen_height()-self.size/2.0);
+        self.collision_box.x = self.x;
+        self.collision_box.y = self.y;
+    }
+
     fn draw(&self) {
         draw_circle(self.x, self.y, self.size, self.color);
+    }
+}
+
+struct DynamicPattern {
+    max_size: f32,
+    size: f32,
+    color: Color,
+}
+
+impl DynamicPattern {
+    fn next_color(&mut self){
+        if self.color == PURPLE{
+            self.color = BLUE;
+        } else{
+            self.color = PURPLE;
+        }
+    }
+
+    fn next_size(&mut self){
+        self.size = self.max_size  * get_time().sin() as f32;
     }
 }
 
@@ -38,35 +79,21 @@ fn window_conf() -> Conf {
         ..Default::default()
     }
 }
+
 #[macroquad::main(window_conf)]
 async fn main() {
-    let pattern_size = 80.0;
+    let mut score: i64 = 0;
+
     let mut pattern = DynamicPattern {
         max_size: 70.0,
-        min_size: 40.0,
-        offset: 20.0,
-        direction: 1.0,
         size: 70.0,
-        speed: 0.01,
         color: Color::new(1.0, 1.0, 1.0, 0.2),
     };
 
 
-    let mut player = Player {
-        x: screen_width() / 2.0,
-        y: screen_height() / 2.0,
-        speed: 5.0,
-        particles: Vec::new(),
-    };
+    let mut player = Player::new (screen_width() / 2.0, screen_height() / 2.0, 5.0, 80.0);
 
-    let mut egg = Egg{
-        x: screen_width() / 2.0,
-        y: screen_height() / 2.0,
-        size: 20.0,
-        color: Color::new(1.0, 1.0, 1.0, 1.0),
-
-    };
-    // set window to fullscreen
+    let mut egg = Egg::new(screen_width() / 2.0, screen_height() / 2.0, 20.0, Color::new(1.0, 1.0, 1.0, 1.0));
 
 
     loop {
@@ -74,15 +101,19 @@ async fn main() {
 
         if is_key_down(KeyCode::Right) {
             player.x += player.speed;
+            player.collision_box.x = player.x;
         }
         if is_key_down(KeyCode::Left) {
             player.x -= player.speed;
+            player.collision_box.x = player.x;
         }
         if is_key_down(KeyCode::Up) {
             player.y -= player.speed;
+            player.collision_box.y = player.y;
         }
         if is_key_down(KeyCode::Down) {
             player.y += player.speed;
+            player.collision_box.y = player.y;
         }
 
         if is_key_down(KeyCode::Q){
@@ -94,7 +125,7 @@ async fn main() {
         player.particles.push(PlayerParticle {
             x: player.x,
             y: player.y,
-            size: 80.0,
+            size: player.size,
             deflate_speed: 1.0,
         });
 
@@ -110,39 +141,21 @@ async fn main() {
         player.particles.retain(|particle| particle.size > 2.0);
 
         // print player particles length
-        draw_text(&format!("Particles: {}", player.particles.len()), 50.0, 50.0, 50.0, WHITE);
+        // draw_text(&format!("Particles: {}", player.particles.len()), 50.0, 50.0, 50.0, WHITE);
         // draw fps on the screen
         draw_text(&format!("FPS: {}", get_fps()), 50.0, 100.0, 50.0, WHITE);
-        draw_circle(player.x, player.y, 80.0, Color::new(0.8, 0.8, 0.8, 1.0));
+        // draw_text(&format!("Colliding: {}", player.collision_box.overlaps(&egg.collision_box)), 50.0, 150.0, 50.0, WHITE);
+
+        if player.collision_box.overlaps(&egg.collision_box){
+            score += 1;
+            egg.regenerate();
+        }
+
+        draw_text(&format!("Score: {}", score), 50.0, 150.0, 50.0, WHITE);
+
+        draw_circle(player.x, player.y, player.size, Color::new(0.8, 0.8, 0.8, 1.0));
 
         next_frame().await
-    }
-}
-
-
-
-
-struct DynamicPattern {
-    max_size: f32,
-    min_size: f32,
-    offset: f32,
-    direction: f32,
-    size: f32,
-    speed: f32,
-    color: Color,
-}
-
-impl DynamicPattern {
-    fn next_color(&mut self){
-        if self.color == PURPLE{
-            self.color = BLUE;
-        } else{
-            self.color = PURPLE;
-        }
-    }
-
-    fn next_size(&mut self){
-        self.size = self.max_size  * get_time().sin() as f32;
     }
 }
 
